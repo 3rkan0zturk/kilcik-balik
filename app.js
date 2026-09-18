@@ -6,26 +6,31 @@ const defaultDistricts = [
 ];
 
 const defaultFish = [
-    { name: "Palamut", price: 100 }, { name: "Sardalye", price: 150 }, { name: "Hamsi", price: 200 },
-    { name: "İstavrit", price: 200 }, { name: "Gubbes", price: 200 }, { name: "Gümüş", price: 200 },
-    { name: "Çıtır Pasa Barbun", price: 985 }, { name: "Karpuzcuk Beyaz Mercan", price: 985 },
-    { name: "Mercan", price: 400 }, { name: "Cupra", price: 500 }, { name: "Levrek", price: 600 },
-    { name: "Kaya Levregi Granyöz", price: 600 }, { name: "Kolyoz", price: 250 },
-    { name: "İri paşa Barbun", price: 2000 }, { name: "Lokum", price: 500 }, { name: "Kefal", price: 285 },
-    { name: "Mırmır", price: 650 }, { name: "Jumbo Karides", price: 1000 }, { name: "Çim Çim Karides", price: 1500 },
-    { name: "Akya Kuzu", price: 750 }, { name: "Grida (Lagos)", price: 2000 }
+    { name: "Palamut" }, { name: "Sardalye" }, { name: "Hamsi" },
+    { name: "İstavrit" }, { name: "Gubbes" }, { name: "Gümüş" },
+    { name: "Çıtır Pasa Barbun" }, { name: "Karpuzcuk Beyaz Mercan" },
+    { name: "Mercan" }, { name: "Cupra" }, { name: "Levrek" },
+    { name: "Kaya Levregi Granyöz" }, { name: "Kolyoz" },
+    { name: "İri paşa Barbun" }, { name: "Lokum" }, { name: "Kefal" },
+    { name: "Mırmır" }, { name: "Jumbo Karides" }, { name: "Çim Çim Karides" },
+    { name: "Akya Kuzu" }, { name: "Grida (Lagos)" }
 ];
 
 let fishData = JSON.parse(localStorage.getItem('fishData')) || defaultFish;
 let orderData = JSON.parse(localStorage.getItem('orderData')) || [];
-let myChart = null;
 let currentCalDate = new Date();
+let currentlyFilteredOrders = [];
 
-// Eski verileri yeni "status" yapısına geçir (Migration)
+// --- VERİ GÖÇÜ (MIGRATION) ---
+// Eski sabit fiyatlı ve 'kg' adlı değişkenleri yeni formata geçirir.
+fishData = fishData.map(f => typeof f === 'object' ? { name: f.name } : { name: f });
+
 orderData.forEach(o => {
-    if (o.status === undefined) {
-        o.status = o.isDelivered ? 1 : 0;
-        delete o.isDelivered;
+    if (o.status === undefined) { o.status = o.isDelivered ? 1 : 0; delete o.isDelivered; }
+    if (o.kg !== undefined) {
+        o.amount = o.kg;
+        o.unitType = "KG"; // Eski verilerin hepsi KG olarak kabul edilir
+        delete o.kg;
     }
 });
 
@@ -34,12 +39,10 @@ function saveData() {
     localStorage.setItem('orderData', JSON.stringify(orderData));
 }
 
-// Toast (SweetAlert) Ayarı
 const Toast = Swal.mixin({
     toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true
 });
 
-// --- YÜKLENME OLAYLARI ---
 document.addEventListener('DOMContentLoaded', () => {
     if(!localStorage.getItem('fishData')) saveData();
 
@@ -48,20 +51,16 @@ document.addEventListener('DOMContentLoaded', () => {
     renderFishSettings();
     renderCalendar();
 
-    // Uygulama ilk açıldığında seçili olan tarihi (Bugün veya Cumartesi) filtrelere bas
     const todayStr = document.getElementById('o_date').value;
     document.getElementById('filter_date').value = todayStr;
-    document.getElementById('r_date').value = todayStr;
-    document.getElementById('r_month').value = todayStr.substring(0,7);
 
     applyListFilters();
 });
 
-// --- YARDIMCI FONKSİYONLAR ---
 function isPastDate(dateString) {
     const selectedDate = new Date(dateString);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Bugünün tarihine izin ver
+    today.setHours(0, 0, 0, 0);
     return selectedDate < today;
 }
 
@@ -74,7 +73,6 @@ function getIsoWeek(dateString) {
     return `${d.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
 }
 
-// --- SEKME (TAB) YÖNETİMİ ---
 function switchTab(tabId, el) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-item-btn').forEach(el => el.classList.remove('active'));
@@ -82,10 +80,8 @@ function switchTab(tabId, el) {
     el.classList.add('active');
 
     if(tabId === 'list') { renderCalendar(); applyListFilters(); }
-    if(tabId === 'report') generateReport();
 }
 
-// --- TARİH VE SELECT DOLDURMA ---
 function setupDateLogic() {
     const today = new Date();
     const day = today.getDay();
@@ -103,19 +99,18 @@ function populateSelects() {
     document.getElementById('e_district').innerHTML = districtHTML;
 
     const filterDistrictHTML = `<option value="ALL">Tüm İlçeler</option>` + districtHTML;
-    document.getElementById('r_district').innerHTML = filterDistrictHTML;
     document.getElementById('filter_district').innerHTML = filterDistrictHTML;
 
     updateFishSelect();
 }
 
 function updateFishSelect() {
-    const fishHTML = fishData.map(f => `<option value="${f.name}" data-price="${f.price}">${f.name} - ${f.price} ₺</option>`).join('');
+    const fishHTML = fishData.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
     document.getElementById('o_fish').innerHTML = fishHTML;
     document.getElementById('e_fish').innerHTML = fishHTML;
 }
 
-// --- AKILLI MÜŞTERİ ARAMA (AUTOCOMPLETE) ---
+// --- AKILLI ARAMA ---
 const customerInput = document.getElementById('o_customer');
 const suggestionsBox = document.getElementById('customerSuggestions');
 
@@ -152,14 +147,11 @@ customerInput.addEventListener('input', function() {
         suggestionsBox.style.display = 'none';
     }
 });
-
 document.addEventListener('click', function(e) {
-    if (!document.getElementById('customer-wrapper').contains(e.target)) {
-        suggestionsBox.style.display = 'none';
-    }
+    if (!document.getElementById('customer-wrapper').contains(e.target)) { suggestionsBox.style.display = 'none'; }
 });
 
-// --- TAKVİM MANTIĞI ---
+// --- TAKVİM ---
 function changeCalMonth(dir) {
     currentCalDate.setMonth(currentCalDate.getMonth() + dir);
     renderCalendar();
@@ -168,10 +160,8 @@ function changeCalMonth(dir) {
 function renderCalendar() {
     const grid = document.getElementById('calDaysGrid');
     const monthText = document.getElementById('calMonthYearText');
-
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
-
     const monthsTR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
     monthText.innerText = `${monthsTR[month]} ${year}`;
 
@@ -182,9 +172,7 @@ function renderCalendar() {
                 <div class="cal-day-name">Per</div><div class="cal-day-name">Cum</div><div class="cal-day-name">Cmt</div><div class="cal-day-name">Paz</div>`;
 
     let emptyDays = (firstDay === 0) ? 6 : firstDay - 1;
-    for (let i = 0; i < emptyDays; i++) {
-        html += `<div></div>`;
-    }
+    for (let i = 0; i < emptyDays; i++) html += `<div></div>`;
 
     const datesWithOrders = new Set(orderData.map(o => o.date));
     const activeFilterDate = document.getElementById('filter_date').value;
@@ -193,7 +181,6 @@ function renderCalendar() {
         let dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         let hasOrder = datesWithOrders.has(dateStr) ? 'has-order' : '';
         let isActive = (dateStr === activeFilterDate) ? 'active-day' : '';
-
         html += `<div class="cal-day ${hasOrder} ${isActive}" onclick="selectDateFromCalendar('${dateStr}')">${i}</div>`;
     }
     grid.innerHTML = html;
@@ -202,8 +189,7 @@ function renderCalendar() {
 function selectDateFromCalendar(dateStr) {
     document.getElementById('filter_date').value = dateStr;
     document.getElementById('filter_week').value = "";
-    renderCalendar();
-    applyListFilters();
+    renderCalendar(); applyListFilters();
 }
 
 function onDateFilterChange() {
@@ -216,7 +202,7 @@ function onWeekFilterChange() {
     renderCalendar(); applyListFilters();
 }
 
-// --- YENİ KAYIT ---
+// --- YENİ KAYIT EKLENMESİ ---
 document.getElementById('orderForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const dateVal = document.getElementById('o_date').value;
@@ -226,9 +212,10 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
         return;
     }
 
-    const fishOpt = document.getElementById('o_fish').options[document.getElementById('o_fish').selectedIndex];
-    const kg = parseFloat(document.getElementById('o_kg').value);
-    const fishPrice = parseFloat(fishOpt.getAttribute('data-price'));
+    const fishOpt = document.getElementById('o_fish').value;
+    const unitType = document.getElementById('o_unit').value; // KG veya Adet
+    const amount = parseFloat(document.getElementById('o_amount').value);
+    const customPrice = parseFloat(document.getElementById('o_price').value);
 
     orderData.push({
         id: Date.now(),
@@ -236,10 +223,11 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
         customer: document.getElementById('o_customer').value,
         phone: document.getElementById('o_phone').value,
         district: document.getElementById('o_district').value,
-        fishName: fishOpt.value,
-        kg: kg,
-        unitPrice: fishPrice,
-        totalPrice: kg * fishPrice,
+        fishName: fishOpt,
+        amount: amount,
+        unitType: unitType,
+        unitPrice: customPrice,
+        totalPrice: amount * customPrice,
         note: document.getElementById('o_note').value,
         status: 0, cancelNote: ""
     });
@@ -262,8 +250,10 @@ function applyListFilters() {
     if(fDate) filtered = filtered.filter(o => o.date === fDate);
     if(fWeek) filtered = filtered.filter(o => getIsoWeek(o.date) === fWeek);
 
+    currentlyFilteredOrders = filtered;
+
     renderOrdersHTML(filtered);
-    updateChart(filtered);
+    updateListSummaries(filtered);
 }
 
 function renderOrdersHTML(filteredOrders) {
@@ -275,14 +265,16 @@ function renderOrdersHTML(filteredOrders) {
 
     container.innerHTML = filteredOrders.map(o => {
         let borderClass = o.status === 1 ? "status-1" : o.status === 2 ? "status-2" : "";
+        let priceTag = `${o.unitPrice}₺/${o.unitType}`;
+
         return `
         <div class="card card-order p-3 mb-2 shadow-sm ${borderClass}">
             <div class="d-flex justify-content-between align-items-start">
                 <div style="flex-grow:1; padding-right:10px;">
                     <h6 class="mb-1">${o.customer} <small class="text-muted">(${o.district})</small></h6>
                     <a href="tel:${o.phone}" class="text-decoration-none d-block mb-1"><i class="bi bi-telephone-fill"></i> ${o.phone}</a>
-                    <span class="badge bg-secondary">${o.fishName} x ${o.kg} KG</span>
-                    <span class="badge bg-primary">${o.totalPrice} ₺</span>
+                    <span class="badge bg-secondary mb-1">${o.fishName} x ${o.amount} ${o.unitType} <small>(${priceTag})</small></span><br>
+                    <span class="badge bg-primary fs-6" title="Müşterinin Ödeyeceği Tutar">${o.totalPrice.toLocaleString('tr-TR')} ₺ Ödenecek</span>
                     ${o.note ? `<div class="text-muted small mt-1"><i class="bi bi-info-circle"></i> ${o.note}</div>` : ''}
                     ${o.status === 2 && o.cancelNote ? `<div class="text-danger small mt-1 fw-bold"><i class="bi bi-x-circle"></i> Neden: ${o.cancelNote}</div>` : ''}
                 </div>
@@ -304,88 +296,70 @@ function renderOrdersHTML(filteredOrders) {
     }).join('');
 }
 
-// --- GRAFİK VE LİSTE ÖZETİ GÜNCELLEME (YENİLENEN BÖLÜM) ---
-function updateChart(data) {
+// --- TÜR VE BİRİME GÖRE DETAYLI ÖZET KARTLARI ---
+function updateListSummaries(data) {
     const grouped = {};
 
-    // Verileri hesapla (Toplam, Teslim Edilen, Kalan)
+    // Verileri Balık Türü ve Birim(KG/Adet) olarak grupla
     data.forEach(o => {
         if(!grouped[o.fishName]) {
-            grouped[o.fishName] = { total: 0, del: 0, remain: 0 };
+            grouped[o.fishName] = {
+                KG: { total: 0, del: 0, remain: 0 },
+                Adet: { total: 0, del: 0, remain: 0 }
+            };
         }
-        grouped[o.fishName].total += o.kg;
-        if(o.status === 1) grouped[o.fishName].del += o.kg;
-        else if(o.status === 0) grouped[o.fishName].remain += o.kg;
-        // İptal (2) olanlar toplama girer ama teslim/kalan hanesine yazılmaz.
+        let u = o.unitType;
+        if(o.status !== 2) grouped[o.fishName][u].total += o.amount;
+        if(o.status === 1) grouped[o.fishName][u].del += o.amount;
+        if(o.status === 0) grouped[o.fishName][u].remain += o.amount;
     });
 
-    // --- LİSTE SAYFASI ÖZET KARTLARI (YENİ) ---
     const summaryContainer = document.getElementById('listSummaryContainer');
     if(Object.keys(grouped).length === 0) {
         summaryContainer.innerHTML = '<span class="text-muted small">Kayıtlı veri yok</span>';
     } else {
-        summaryContainer.innerHTML = Object.entries(grouped).map(([fish, stats]) => `
-            <div class="card shadow-sm border-0 border-start border-4 border-primary" style="width: 140px;">
+        summaryContainer.innerHTML = Object.entries(grouped).map(([fish, units]) => {
+            // Eğer bu balıkta hiç veri yoksa (tamamı silinmişse) kartı çizme
+            if(units.KG.total === 0 && units.Adet.total === 0 && units.KG.remain === 0 && units.Adet.remain === 0) return '';
+
+            let html = `
+            <div class="card shadow-sm border-0 border-start border-4 border-primary" style="width: 175px;">
                 <div class="card-body p-2 text-center">
-                    <strong class="d-block text-truncate mb-1" style="font-size: 13px;">${fish}</strong>
-                    <div class="d-flex justify-content-between text-muted" style="font-size: 11px;">
-                        <span title="Toplam Sipariş">Top: <b class="text-dark">${stats.total}</b></span>
-                        <span title="Teslim Edilen">Tes: <b class="text-success">${stats.del}</b></span>
-                        <span title="Bekleyen">Kal: <b class="text-warning">${stats.remain}</b></span>
+                    <strong class="d-block text-truncate mb-1" style="font-size: 13px;" title="${fish}">${fish}</strong>`;
+
+            // KG verisi varsa
+            if(units.KG.total > 0 || units.KG.del > 0 || units.KG.remain > 0) {
+                html += `
+                <div class="mb-1 p-1 bg-light rounded">
+                    <span class="badge bg-secondary w-100 mb-1" style="font-size:10px;">KG Olarak</span>
+                    <div class="d-flex justify-content-around text-muted" style="font-size: 11px;">
+                        <span title="Toplam Talep">Top:<b class="text-dark">${units.KG.total}</b></span>
+                        <span title="Teslim Edilen">Tes:<b class="text-success">${units.KG.del}</b></span>
+                        <span title="Bekleyen">Kal:<b class="text-warning">${units.KG.remain}</b></span>
                     </div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // --- CHART.JS GÜNCELLEMESİ (YIĞINLI GRAFİK - STACKED) ---
-    const labels = Object.keys(grouped);
-    const delData = labels.map(f => grouped[f].del);
-    const remainData = labels.map(f => grouped[f].remain);
-
-    if(myChart) myChart.destroy();
-
-    const ctx = document.getElementById('fishChart').getContext('2d');
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Teslim Edilen',
-                    data: delData,
-                    backgroundColor: 'rgba(25, 135, 84, 0.8)', // Yeşil
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Bekleyen (Kalan)',
-                    data: remainData,
-                    backgroundColor: 'rgba(255, 193, 7, 0.8)', // Sarı
-                    borderColor: 'rgba(255, 193, 7, 1)',
-                    borderWidth: 1
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { stacked: true }, // Yığınlı yapı X ekseni
-                y: { stacked: true, beginAtZero: true } // Yığınlı yapı Y ekseni
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: { boxWidth: 12, font: { size: 10 } }
-                }
+                </div>`;
             }
-        }
-    });
+
+            // Adet verisi varsa
+            if(units.Adet.total > 0 || units.Adet.del > 0 || units.Adet.remain > 0) {
+                html += `
+                <div class="p-1 bg-light rounded">
+                    <span class="badge bg-secondary w-100 mb-1" style="font-size:10px;">Adet Olarak</span>
+                    <div class="d-flex justify-content-around text-muted" style="font-size: 11px;">
+                        <span title="Toplam Talep">Top:<b class="text-dark">${units.Adet.total}</b></span>
+                        <span title="Teslim Edilen">Tes:<b class="text-success">${units.Adet.del}</b></span>
+                        <span title="Bekleyen">Kal:<b class="text-warning">${units.Adet.remain}</b></span>
+                    </div>
+                </div>`;
+            }
+
+            html += `</div></div>`;
+            return html;
+        }).join('');
+    }
 }
 
-// --- DÜZENLEME (EDIT MODAL) ---
+// --- DÜZENLEME MODALI ---
 let editModalInstance = null;
 
 function openEditModal(id) {
@@ -398,12 +372,12 @@ function openEditModal(id) {
     document.getElementById('e_phone').value = order.phone;
     document.getElementById('e_district').value = order.district;
     document.getElementById('e_fish').value = order.fishName;
-    document.getElementById('e_kg').value = order.kg;
+    document.getElementById('e_unit').value = order.unitType;
+    document.getElementById('e_amount').value = order.amount;
+    document.getElementById('e_price').value = order.unitPrice;
     document.getElementById('e_note').value = order.note;
 
-    if(!editModalInstance) {
-        editModalInstance = new bootstrap.Modal(document.getElementById('editModal'));
-    }
+    if(!editModalInstance) editModalInstance = new bootstrap.Modal(document.getElementById('editModal'));
     editModalInstance.show();
 }
 
@@ -411,7 +385,6 @@ document.getElementById('editOrderForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const id = parseInt(document.getElementById('e_id').value);
     const newDate = document.getElementById('e_date').value;
-
     const order = orderData.find(o => o.id === id);
 
     if (newDate !== order.date && isPastDate(newDate)) {
@@ -419,36 +392,35 @@ document.getElementById('editOrderForm').addEventListener('submit', (e) => {
         return;
     }
 
-    const fishOpt = document.getElementById('e_fish').options[document.getElementById('e_fish').selectedIndex];
-    const kg = parseFloat(document.getElementById('e_kg').value);
+    const fishOpt = document.getElementById('e_fish').value;
+    const unitType = document.getElementById('e_unit').value;
+    const amount = parseFloat(document.getElementById('e_amount').value);
+    const customPrice = parseFloat(document.getElementById('e_price').value);
 
     order.date = newDate;
     order.customer = document.getElementById('e_customer').value;
     order.phone = document.getElementById('e_phone').value;
     order.district = document.getElementById('e_district').value;
-    order.fishName = fishOpt.value;
-    order.kg = kg;
-    order.unitPrice = parseFloat(fishOpt.getAttribute('data-price'));
-    order.totalPrice = order.kg * order.unitPrice;
+    order.fishName = fishOpt;
+    order.unitType = unitType;
+    order.amount = amount;
+    order.unitPrice = customPrice;
+    order.totalPrice = amount * customPrice;
     order.note = document.getElementById('e_note').value;
 
     saveData();
     editModalInstance.hide();
     Toast.fire({ icon: 'success', title: 'Sipariş Güncellendi' });
-
-    renderCalendar();
-    applyListFilters();
+    renderCalendar(); applyListFilters();
 });
 
-// --- SİPARİŞ DURUM & SİLME ---
+// --- DURUM & SİLME ---
 function changeOrderStatus(id, selectEl) {
     const val = parseInt(selectEl.value);
     const order = orderData.find(o => o.id === id);
     if(val === 2) {
         Swal.fire({
-            title: 'Neden İptal Edildi?',
-            input: 'text',
-            showCancelButton: true,
+            title: 'Neden İptal Edildi?', input: 'text', showCancelButton: true,
             confirmButtonText: 'Kaydet', cancelButtonText: 'Vazgeç'
         }).then((result) => {
             if(result.isConfirmed) {
@@ -475,134 +447,75 @@ function deleteOrder(id) {
     });
 }
 
-// --- RAPORLAMA EKRANI ---
-function toggleDateFilter() {
-    const type = document.getElementById('r_date_type').value;
-    document.getElementById('r_date').style.display = type === 'date' ? 'block' : 'none';
-    document.getElementById('r_month').style.display = type === 'month' ? 'block' : 'none';
-}
-
-function generateReport() {
-    const dateType = document.getElementById('r_date_type').value;
-    const rDate = document.getElementById('r_date').value;
-    const rMonth = document.getElementById('r_month').value;
-    const rDistrict = document.getElementById('r_district').value;
-    const container = document.getElementById('reportContainer');
-
-    let filtered = orderData;
-
-    if(dateType === 'date' && rDate) {
-        filtered = filtered.filter(o => o.date === rDate);
-    } else if(dateType === 'month' && rMonth) {
-        filtered = filtered.filter(o => o.date.startsWith(rMonth));
-    }
-
-    if(rDistrict !== 'ALL') {
-        filtered = filtered.filter(o => o.district === rDistrict);
-    }
-
-    if(filtered.length === 0) {
-        container.innerHTML = `<div class="alert alert-warning">Seçili kriterlere uygun veri bulunamadı.</div>`;
+// --- PDF İNDİRME ---
+function downloadPDF() {
+    if(currentlyFilteredOrders.length === 0) {
+        Swal.fire('Bilgi', 'PDF olarak indirilecek sipariş bulunamadı.', 'info');
         return;
     }
 
-    const reportData = {};
+    const tbody = document.getElementById('pdfTableBody');
+    tbody.innerHTML = '';
 
-    filtered.forEach(o => {
-        if(!reportData[o.fishName]) {
-            reportData[o.fishName] = { req: 0, del: 0, cancel: 0, remain: 0 };
-        }
-        reportData[o.fishName].req += o.kg;
+    let totalMoneyPDF = 0;
 
-        if(o.status === 1) reportData[o.fishName].del += o.kg;
-        else if(o.status === 2) reportData[o.fishName].cancel += o.kg;
-        else reportData[o.fishName].remain += o.kg;
+    currentlyFilteredOrders.forEach(o => {
+        let statusText = o.status === 1 ? "Teslim" : o.status === 2 ? "İptal" : "Bekliyor";
+        if (o.status !== 2) { totalMoneyPDF += o.totalPrice; }
+
+        let noteTxt = o.note ? `<br><small style="color:gray;">${o.note}</small>` : '';
+
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 8px;">${o.customer}</td>
+            <td style="padding: 8px;">${o.district}</td>
+            <td style="padding: 8px;">${o.phone}</td>
+            <td style="padding: 8px;">${o.fishName} ${noteTxt}</td>
+            <td style="padding: 8px;">${o.amount} ${o.unitType}</td>
+            <td style="padding: 8px;">${o.totalPrice.toLocaleString('tr-TR')} ₺</td>
+            <td style="padding: 8px;">${statusText}</td>
+        `;
+        tbody.appendChild(tr);
     });
 
-    let html = `<table class="table table-bordered table-sm mt-3" style="font-size: 13px;">
-        <thead class="table-dark">
-            <tr>
-                <th>Tür</th>
-                <th>Tlp</th>
-                <th>Teslim</th>
-                <th>Kalan</th>
-                <th>İptal</th>
-            </tr>
-        </thead>
-        <tbody>`;
+    const element = document.getElementById('pdfPrintArea');
+    const opt = {
+        margin:       10,
+        filename:     `Siparis_Listesi_${new Date().toISOString().split('T')[0]}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
 
-    for (const [fish, data] of Object.entries(reportData)) {
-        html += `<tr>
-            <td><strong>${fish}</strong></td>
-            <td class="text-primary fw-bold">${data.req}</td>
-            <td class="text-success fw-bold">${data.del}</td>
-            <td class="text-warning fw-bold">${data.remain}</td>
-            <td class="text-danger fw-bold">${data.cancel}</td>
-        </tr>`;
-    }
-    html += `</tbody></table>`;
-
-    const totalReqKg = Object.values(reportData).reduce((sum, item) => sum + item.req, 0);
-    const totalDelKg = Object.values(reportData).reduce((sum, item) => sum + item.del, 0);
-
-    html = `
-    <div class="row text-center mb-3">
-        <div class="col-6 mb-2">
-            <div class="card bg-primary text-white p-2 shadow-sm">
-                <h6 class="mb-1">Talep Edilen</h6>
-                <h4 class="m-0">${totalReqKg} KG</h4>
-            </div>
-        </div>
-        <div class="col-6 mb-2">
-            <div class="card bg-success text-white p-2 shadow-sm">
-                <h6 class="mb-1">Teslim Edilen</h6>
-                <h4 class="m-0">${totalDelKg} KG</h4>
-            </div>
-        </div>
-    </div>
-    ` + html;
-
-    container.innerHTML = html;
+    element.parentElement.style.display = "block";
+    html2pdf().set(opt).from(element).save().then(() => {
+        element.parentElement.style.display = "none";
+    });
 }
 
-// --- AYARLAR (BALIK EKLME / DÜZENLEME) ---
+// --- AYARLAR (BALIK TÜRÜ YÖNETİMİ) ---
 document.getElementById('fishForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const name = document.getElementById('f_name').value;
-    const price = document.getElementById('f_price').value;
+    const name = document.getElementById('f_name').value.trim();
 
     const existing = fishData.find(f => f.name.toLowerCase() === name.toLowerCase());
-    if(existing) {
-        existing.price = parseFloat(price);
-        Toast.fire({ icon: 'success', title: 'Fiyat Güncellendi' });
-    } else {
-        fishData.push({ name, price: parseFloat(price) });
+    if(!existing) {
+        fishData.push({ name: name });
         Toast.fire({ icon: 'success', title: 'Yeni Balık Eklendi' });
+        saveData(); renderFishSettings(); updateFishSelect();
+    } else {
+        Swal.fire('Bilgi', 'Bu balık türü zaten mevcut!', 'info');
     }
-
-    saveData();
-    renderFishSettings();
-    updateFishSelect();
     e.target.reset();
 });
-
-function editFish(name) {
-    const fish = fishData.find(f => f.name === name);
-    if(fish) {
-        document.getElementById('f_name').value = fish.name;
-        document.getElementById('f_price').value = fish.price;
-        document.getElementById('f_price').focus();
-    }
-}
 
 function renderFishSettings() {
     const container = document.getElementById('fishListContainer');
     container.innerHTML = fishData.map((f, index) => `
         <li class="list-group-item d-flex justify-content-between align-items-center">
-            <span><strong>${f.name}</strong> <span class="badge bg-secondary ms-2">${f.price} ₺</span></span>
+            <span><strong>${f.name}</strong></span>
             <div>
-                <button class="btn btn-sm btn-info text-white me-1" onclick="editFish('${f.name}')"><i class="bi bi-pencil"></i></button>
-                <button class="btn btn-sm btn-danger" onclick="deleteFish(${index})"><i class="bi bi-trash"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteFish(${index})"><i class="bi bi-trash"></i> Sil</button>
             </div>
         </li>
     `).join('');
@@ -620,13 +533,11 @@ function deleteFish(index) {
     });
 }
 
-// --- İÇE AKTAR / DIŞA AKTAR / SIFIRLA ---
 function exportData() {
     const data = { fishData, orderData };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const a = document.createElement('a'); a.href = url;
     a.download = `Balik_Takip_Yedek_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
 }
@@ -652,17 +563,12 @@ function clearAllData() {
     Swal.fire({
         title: 'Tüm veriler silinecek!', text: "Onaylamak için kutuya SİL yazın", input: 'text',
         icon: 'warning', showCancelButton: true, confirmButtonText: 'Sıfırla', cancelButtonText: 'İptal',
-        preConfirm: (val) => {
-            if (val !== 'SİL') { Swal.showValidationMessage('Onaylamak için SİL yazmalısınız'); }
-        }
+        preConfirm: (val) => { if (val !== 'SİL') { Swal.showValidationMessage('Onaylamak için SİL yazmalısınız'); } }
     }).then((result) => {
-        if (result.isConfirmed) {
-            localStorage.clear(); location.reload();
-        }
+        if (result.isConfirmed) { localStorage.clear(); location.reload(); }
     });
 }
 
-// --- PWA SERVICE WORKER ---
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
 }

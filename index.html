@@ -10,10 +10,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <!-- SweetAlert2 CSS & JS -->
+    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- HTML2PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <style>
         body { background-color: #f8f9fa; padding-bottom: 70px; }
@@ -21,18 +21,16 @@
         .card-order.status-1 { border-left-color: #198754; background-color: #f8fff9; opacity: 0.9; }
         .card-order.status-2 { border-left-color: #dc3545; background-color: #fff8f8; opacity: 0.8; }
         .bottom-nav { position: fixed; bottom: 0; width: 100%; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000; display: flex; justify-content: space-around; padding: 10px 0; }
-        .nav-item-btn { text-align: center; color: #6c757d; cursor: pointer; text-decoration: none; font-size: 12px; flex-grow: 1; }
+        .nav-item-btn { text-align: center; color: #6c757d; cursor: pointer; text-decoration: none; font-size: 13px; flex-grow: 1; }
         .nav-item-btn i { font-size: 24px; display: block; margin-bottom: 2px; }
         .nav-item-btn.active { color: #0d6efd; font-weight: bold; }
         .view-section { display: none; }
         .view-section.active { display: block; }
 
-        /* Akıllı Müşteri Arama */
         .autocomplete-items { position: absolute; border: 1px solid #d4d4d4; z-index: 99; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .autocomplete-items div { padding: 10px; cursor: pointer; border-bottom: 1px solid #d4d4d4; }
         .autocomplete-items div:hover { background-color: #e9e9e9; }
 
-        /* Takvim Stilleri */
         .calendar-wrapper { background: #fff; border-radius: 8px; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
         .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
@@ -42,14 +40,13 @@
         .cal-day.active-day { background-color: #0d6efd; color: white; }
         .cal-day.has-order::after { content: ''; width: 6px; height: 6px; background: #ffc107; border-radius: 50%; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
         .cal-day.has-order.active-day::after { background: #fff; }
-        .cal-day.disabled { color: #ccc; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div class="bg-primary text-white p-3 shadow-sm d-flex justify-content-between align-items-center">
         <h5 class="m-0"><i class="bi bi-water"></i> Balık Takip</h5>
-        <button class="btn btn-sm btn-light" onclick="exportData()"><i class="bi bi-download"></i> Dışa Aktar</button>
+        <button class="btn btn-sm btn-light" onclick="exportData()"><i class="bi bi-download"></i> Yedekle</button>
     </div>
 
     <div class="container mt-3">
@@ -76,14 +73,25 @@
                         <label>İlçe</label>
                         <select id="o_district" class="form-select" required></select>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-7">
-                            <label>Balık Türü</label>
-                            <select id="o_fish" class="form-select" required></select>
+                    <div class="mb-3">
+                        <label>Balık Türü</label>
+                        <select id="o_fish" class="form-select" required></select>
+                    </div>
+                    <div class="row mb-3 g-2">
+                        <div class="col-4">
+                            <label>Birim</label>
+                            <select id="o_unit" class="form-select" required>
+                                <option value="KG">KG</option>
+                                <option value="Adet">Adet</option>
+                            </select>
                         </div>
-                        <div class="col-5">
-                            <label>Miktar (KG)</label>
-                            <input type="number" id="o_kg" class="form-control" step="0.1" min="0.1" value="1" required>
+                        <div class="col-4">
+                            <label>Miktar</label>
+                            <input type="number" id="o_amount" class="form-control" step="0.1" min="0.1" value="1" required>
+                        </div>
+                        <div class="col-4">
+                            <label>Fiyat (₺)</label>
+                            <input type="number" id="o_price" class="form-control" step="0.01" required placeholder="0.00">
                         </div>
                     </div>
                     <div class="mb-3">
@@ -95,10 +103,9 @@
             </div>
         </div>
 
-        <!-- LİSTE & GRAFİK EKRANI -->
+        <!-- LİSTE EKRANI -->
         <div id="view-list" class="view-section">
 
-            <!-- Takvim Modülü -->
             <div class="calendar-wrapper mb-3">
                 <div class="cal-header">
                     <button class="btn btn-sm btn-outline-secondary" onclick="changeCalMonth(-1)"><i class="bi bi-chevron-left"></i></button>
@@ -108,9 +115,11 @@
                 <div class="cal-grid" id="calDaysGrid"></div>
             </div>
 
-            <!-- Filtreler -->
             <div class="card p-2 mb-3 shadow-sm border-0 bg-white">
-                <h6 class="mb-2 text-muted"><i class="bi bi-funnel"></i> Detaylı Filtreleme</h6>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="m-0 text-muted"><i class="bi bi-funnel"></i> Filtreleme</h6>
+                    <button class="btn btn-sm btn-danger" onclick="downloadPDF()"><i class="bi bi-file-earmark-pdf"></i> PDF İndir</button>
+                </div>
                 <div class="row g-2">
                     <div class="col-6">
                         <select id="filter_district" class="form-select form-select-sm" onchange="applyListFilters()">
@@ -126,60 +135,29 @@
                 </div>
             </div>
 
-            <!-- Grafik ve Tür Bazlı Toplam Alanı -->
+            <!-- TÜR BAZLI DETAYLI ÖZET KARTLARI (KG & ADET AYRIMLI) -->
             <div class="card p-2 mb-3 shadow-sm border-0">
-                <div style="height: 180px; width: 100%;">
-                    <canvas id="fishChart"></canvas>
-                </div>
-                <hr class="my-3">
-                <h6 class="text-center text-muted mb-2">Seçili Filtreye Göre Toplamlar</h6>
-                <div id="listSummaryContainer" class="d-flex flex-wrap justify-content-center gap-2 pb-2">
-                    <!-- Dinamik olarak balık toplamları buraya gelecek -->
-                </div>
+                <h6 class="text-center text-muted m-2"><i class="bi bi-bar-chart-fill"></i> Filtreye Göre Tür Dağılımı</h6>
+                <div id="listSummaryContainer" class="d-flex flex-wrap justify-content-center gap-2 pb-2 mt-2"></div>
             </div>
 
             <h5 class="mb-3">Sipariş Listesi</h5>
             <div id="ordersContainer"></div>
         </div>
 
-        <!-- RAPOR EKRANI -->
-        <div id="view-report" class="view-section">
-            <h4 class="mb-3">Genel Rapor</h4>
-            <div class="card shadow-sm p-3 mb-3">
-                <div class="mb-2">
-                    <label>Zaman Filtresi</label>
-                    <select id="r_date_type" class="form-select form-select-sm mb-2" onchange="toggleDateFilter()">
-                        <option value="all">Tüm Zamanlar</option>
-                        <option value="date">Günlük (Tarih Seç)</option>
-                        <option value="month">Aylık (Ay-Yıl Seç)</option>
-                    </select>
-                    <input type="date" id="r_date" class="form-control form-control-sm mb-2" style="display:none;">
-                    <input type="month" id="r_month" class="form-control form-control-sm mb-2" style="display:none;">
-                </div>
-                <div>
-                    <label>İlçe Filtresi</label>
-                    <select id="r_district" class="form-select form-select-sm mb-2">
-                        <option value="ALL">Tüm İlçeler</option>
-                    </select>
-                </div>
-                <button class="btn btn-secondary w-100 mt-1" onclick="generateReport()"><i class="bi bi-funnel"></i> Raporla</button>
-            </div>
-            <div id="reportContainer" class="table-responsive"></div>
-        </div>
-
         <!-- AYARLAR EKRANI -->
         <div id="view-settings" class="view-section">
-            <h4 class="mb-3">Ayarlar / Balık Fiyatları</h4>
+            <h4 class="mb-3">Ayarlar / Sistem</h4>
             <div class="card shadow-sm p-3 mb-3">
-                <form id="fishForm" class="d-flex gap-2">
-                    <input type="text" id="f_name" class="form-control" placeholder="Balık Adı" required>
-                    <input type="number" id="f_price" class="form-control" placeholder="Fiyat" required>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-check"></i></button>
+                <h6 class="text-muted">Balık Türü Ekle</h6>
+                <form id="fishForm" class="d-flex gap-2 mt-2">
+                    <input type="text" id="f_name" class="form-control" placeholder="Balık Adı (Örn: Palamut)" required>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-plus-lg"></i> Ekle</button>
                 </form>
             </div>
             <ul class="list-group mb-4" id="fishListContainer"></ul>
 
-            <h5 class="mt-4">Sistem Verileri</h5>
+            <h5 class="mt-4">Veri Yönetimi</h5>
             <div class="d-flex gap-2">
                 <label class="btn btn-warning w-50">
                     <i class="bi bi-upload"></i> İçe Aktar
@@ -218,14 +196,25 @@
                             <label>İlçe</label>
                             <select id="e_district" class="form-select" required></select>
                         </div>
-                        <div class="row mb-2">
-                            <div class="col-7">
-                                <label>Balık</label>
-                                <select id="e_fish" class="form-select" required></select>
+                        <div class="mb-2">
+                            <label>Balık</label>
+                            <select id="e_fish" class="form-select" required></select>
+                        </div>
+                        <div class="row mb-2 g-2">
+                            <div class="col-4">
+                                <label>Birim</label>
+                                <select id="e_unit" class="form-select" required>
+                                    <option value="KG">KG</option>
+                                    <option value="Adet">Adet</option>
+                                </select>
                             </div>
-                            <div class="col-5">
-                                <label>KG</label>
-                                <input type="number" id="e_kg" class="form-control" step="0.1" min="0.1" required>
+                            <div class="col-4">
+                                <label>Miktar</label>
+                                <input type="number" id="e_amount" class="form-control" step="0.1" min="0.1" required>
+                            </div>
+                            <div class="col-4">
+                                <label>Fiyat (₺)</label>
+                                <input type="number" id="e_price" class="form-control" step="0.01" required>
                             </div>
                         </div>
                         <div class="mb-2">
@@ -239,11 +228,31 @@
         </div>
     </div>
 
+    <!-- PDF İÇİN GİZLİ ALAN -->
+    <div style="display: none;">
+        <div id="pdfPrintArea" style="padding: 20px; font-family: sans-serif; color: #000;">
+            <h2 id="pdfTitle" style="text-align: center; margin-bottom: 20px;">Sipariş Raporu</h2>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;" border="1">
+                <thead style="background-color: #f2f2f2;">
+                    <tr>
+                        <th style="padding: 8px;">Müşteri</th>
+                        <th style="padding: 8px;">İlçe</th>
+                        <th style="padding: 8px;">Telefon</th>
+                        <th style="padding: 8px;">Tür / Not</th>
+                        <th style="padding: 8px;">Miktar/Birim</th>
+                        <th style="padding: 8px;">Tutar</th>
+                        <th style="padding: 8px;">Durum</th>
+                    </tr>
+                </thead>
+                <tbody id="pdfTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Alt Navigasyon -->
     <div class="bottom-nav">
-        <div class="nav-item-btn active" onclick="switchTab('add', this)"><i class="bi bi-plus-square"></i>Kayıt</div>
-        <div class="nav-item-btn" onclick="switchTab('list', this)"><i class="bi bi-list-task"></i>Liste</div>
-        <div class="nav-item-btn" onclick="switchTab('report', this)"><i class="bi bi-bar-chart"></i>Rapor</div>
+        <div class="nav-item-btn active" onclick="switchTab('add', this)"><i class="bi bi-plus-square"></i>Kayıt Ekle</div>
+        <div class="nav-item-btn" onclick="switchTab('list', this)"><i class="bi bi-list-task"></i>Sipariş Listesi</div>
         <div class="nav-item-btn" onclick="switchTab('settings', this)"><i class="bi bi-gear"></i>Ayarlar</div>
     </div>
 
