@@ -22,14 +22,13 @@ let currentCalDate = new Date();
 let currentlyFilteredOrders = [];
 
 // --- VERİ GÖÇÜ (MIGRATION) ---
-// Eski sabit fiyatlı ve 'kg' adlı değişkenleri yeni formata geçirir.
 fishData = fishData.map(f => typeof f === 'object' ? { name: f.name } : { name: f });
 
 orderData.forEach(o => {
     if (o.status === undefined) { o.status = o.isDelivered ? 1 : 0; delete o.isDelivered; }
     if (o.kg !== undefined) {
-        o.amount = o.kg;
-        o.unitType = "KG"; // Eski verilerin hepsi KG olarak kabul edilir
+        o.amount = Math.round(o.kg); // Varsa eski ondalıkları tam sayıya yuvarlar
+        o.unitType = "KG";
         delete o.kg;
     }
 });
@@ -213,8 +212,9 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
     }
 
     const fishOpt = document.getElementById('o_fish').value;
-    const unitType = document.getElementById('o_unit').value; // KG veya Adet
-    const amount = parseFloat(document.getElementById('o_amount').value);
+    const unitType = document.getElementById('o_unit').value;
+    // Tam sayı (Integer) parse ediliyor
+    const amount = parseInt(document.getElementById('o_amount').value, 10);
     const customPrice = parseFloat(document.getElementById('o_price').value);
 
     orderData.push({
@@ -265,7 +265,7 @@ function renderOrdersHTML(filteredOrders) {
 
     container.innerHTML = filteredOrders.map(o => {
         let borderClass = o.status === 1 ? "status-1" : o.status === 2 ? "status-2" : "";
-        let priceTag = `${o.unitPrice}₺/${o.unitType}`;
+        let priceTag = `${o.unitPrice} ₺/${o.unitType}`;
 
         return `
         <div class="card card-order p-3 mb-2 shadow-sm ${borderClass}">
@@ -273,10 +273,10 @@ function renderOrdersHTML(filteredOrders) {
                 <div style="flex-grow:1; padding-right:10px;">
                     <h6 class="mb-1">${o.customer} <small class="text-muted">(${o.district})</small></h6>
                     <a href="tel:${o.phone}" class="text-decoration-none d-block mb-1"><i class="bi bi-telephone-fill"></i> ${o.phone}</a>
-                    <span class="badge bg-secondary mb-1">${o.fishName} x ${o.amount} ${o.unitType} <small>(${priceTag})</small></span><br>
+                    <span class="badge bg-secondary mb-1" style="font-size: 13px;">${o.fishName} x ${o.amount} ${o.unitType} <small class="text-light fw-normal">(${priceTag})</small></span><br>
                     <span class="badge bg-primary fs-6" title="Müşterinin Ödeyeceği Tutar">${o.totalPrice.toLocaleString('tr-TR')} ₺ Ödenecek</span>
                     ${o.note ? `<div class="text-muted small mt-1"><i class="bi bi-info-circle"></i> ${o.note}</div>` : ''}
-                    ${o.status === 2 && o.cancelNote ? `<div class="text-danger small mt-1 fw-bold"><i class="bi bi-x-circle"></i> Neden: ${o.cancelNote}</div>` : ''}
+                    ${o.status === 2 && o.cancelNote ? `<div class="text-danger small mt-1 fw-bold"><i class="bi bi-x-circle"></i> İptal Nedeni: ${o.cancelNote}</div>` : ''}
                 </div>
                 <div class="text-end" style="min-width: 120px;">
                     <select class="form-select form-select-sm mb-2 fw-bold
@@ -296,11 +296,10 @@ function renderOrdersHTML(filteredOrders) {
     }).join('');
 }
 
-// --- TÜR VE BİRİME GÖRE DETAYLI ÖZET KARTLARI ---
+// --- TÜR VE BİRİME GÖRE DETAYLI, BÜYÜTÜLMÜŞ ÖZET KARTLARI ---
 function updateListSummaries(data) {
     const grouped = {};
 
-    // Verileri Balık Türü ve Birim(KG/Adet) olarak grupla
     data.forEach(o => {
         if(!grouped[o.fishName]) {
             grouped[o.fishName] = {
@@ -319,36 +318,34 @@ function updateListSummaries(data) {
         summaryContainer.innerHTML = '<span class="text-muted small">Kayıtlı veri yok</span>';
     } else {
         summaryContainer.innerHTML = Object.entries(grouped).map(([fish, units]) => {
-            // Eğer bu balıkta hiç veri yoksa (tamamı silinmişse) kartı çizme
             if(units.KG.total === 0 && units.Adet.total === 0 && units.KG.remain === 0 && units.Adet.remain === 0) return '';
 
+            // Kart Boyutu ve Yazılar Büyütüldü
             let html = `
-            <div class="card shadow-sm border-0 border-start border-4 border-primary" style="width: 175px;">
+            <div class="card shadow-sm border-0 border-start border-4 border-primary m-1" style="width: 100%; max-width: 250px;">
                 <div class="card-body p-2 text-center">
-                    <strong class="d-block text-truncate mb-1" style="font-size: 13px;" title="${fish}">${fish}</strong>`;
+                    <strong class="d-block text-truncate mb-2" style="font-size: 16px;" title="${fish}">${fish}</strong>`;
 
-            // KG verisi varsa
             if(units.KG.total > 0 || units.KG.del > 0 || units.KG.remain > 0) {
                 html += `
-                <div class="mb-1 p-1 bg-light rounded">
-                    <span class="badge bg-secondary w-100 mb-1" style="font-size:10px;">KG Olarak</span>
-                    <div class="d-flex justify-content-around text-muted" style="font-size: 11px;">
-                        <span title="Toplam Talep">Top:<b class="text-dark">${units.KG.total}</b></span>
-                        <span title="Teslim Edilen">Tes:<b class="text-success">${units.KG.del}</b></span>
-                        <span title="Bekleyen">Kal:<b class="text-warning">${units.KG.remain}</b></span>
+                <div class="mb-2 p-2 bg-light rounded border">
+                    <span class="badge bg-secondary w-100 mb-2" style="font-size: 12px;">KG Olarak</span>
+                    <div class="d-flex justify-content-around text-dark" style="font-size: 14px; font-weight: 500;">
+                        <span class="d-flex flex-column">Top<b class="fs-5 text-primary">${units.KG.total}</b></span>
+                        <span class="d-flex flex-column">Teslim<b class="fs-5 text-success">${units.KG.del}</b></span>
+                        <span class="d-flex flex-column">Kalan<b class="fs-5 text-warning">${units.KG.remain}</b></span>
                     </div>
                 </div>`;
             }
 
-            // Adet verisi varsa
             if(units.Adet.total > 0 || units.Adet.del > 0 || units.Adet.remain > 0) {
                 html += `
-                <div class="p-1 bg-light rounded">
-                    <span class="badge bg-secondary w-100 mb-1" style="font-size:10px;">Adet Olarak</span>
-                    <div class="d-flex justify-content-around text-muted" style="font-size: 11px;">
-                        <span title="Toplam Talep">Top:<b class="text-dark">${units.Adet.total}</b></span>
-                        <span title="Teslim Edilen">Tes:<b class="text-success">${units.Adet.del}</b></span>
-                        <span title="Bekleyen">Kal:<b class="text-warning">${units.Adet.remain}</b></span>
+                <div class="p-2 bg-light rounded border">
+                    <span class="badge bg-secondary w-100 mb-2" style="font-size: 12px;">Adet Olarak</span>
+                    <div class="d-flex justify-content-around text-dark" style="font-size: 14px; font-weight: 500;">
+                        <span class="d-flex flex-column">Top<b class="fs-5 text-primary">${units.Adet.total}</b></span>
+                        <span class="d-flex flex-column">Teslim<b class="fs-5 text-success">${units.Adet.del}</b></span>
+                        <span class="d-flex flex-column">Kalan<b class="fs-5 text-warning">${units.Adet.remain}</b></span>
                     </div>
                 </div>`;
             }
@@ -394,7 +391,7 @@ document.getElementById('editOrderForm').addEventListener('submit', (e) => {
 
     const fishOpt = document.getElementById('e_fish').value;
     const unitType = document.getElementById('e_unit').value;
-    const amount = parseFloat(document.getElementById('e_amount').value);
+    const amount = parseInt(document.getElementById('e_amount').value, 10);
     const customPrice = parseFloat(document.getElementById('e_price').value);
 
     order.date = newDate;
@@ -457,11 +454,17 @@ function downloadPDF() {
     const tbody = document.getElementById('pdfTableBody');
     tbody.innerHTML = '';
 
-    let totalMoneyPDF = 0;
+    let totalPendingMoney = 0;
+    let totalDeliveredMoney = 0;
+    let totalCanceledMoney = 0;
 
     currentlyFilteredOrders.forEach(o => {
         let statusText = o.status === 1 ? "Teslim" : o.status === 2 ? "İptal" : "Bekliyor";
-        if (o.status !== 2) { totalMoneyPDF += o.totalPrice; }
+
+        // PDF Altında göstermek için paraları status'e göre topla
+        if (o.status === 1) totalDeliveredMoney += o.totalPrice;
+        else if (o.status === 2) totalCanceledMoney += o.totalPrice;
+        else totalPendingMoney += o.totalPrice;
 
         let noteTxt = o.note ? `<br><small style="color:gray;">${o.note}</small>` : '';
 
@@ -473,10 +476,20 @@ function downloadPDF() {
             <td style="padding: 8px;">${o.fishName} ${noteTxt}</td>
             <td style="padding: 8px;">${o.amount} ${o.unitType}</td>
             <td style="padding: 8px;">${o.totalPrice.toLocaleString('tr-TR')} ₺</td>
-            <td style="padding: 8px;">${statusText}</td>
+            <td style="padding: 8px; font-weight:bold;">${statusText}</td>
         `;
         tbody.appendChild(tr);
     });
+
+    let overallMoney = totalPendingMoney + totalDeliveredMoney; // İptaller hariç beklenen ciro
+
+    document.getElementById('pdfSummaryArea').innerHTML = `
+        <div style="margin-bottom: 5px;"><span style="color:#666;">Bekleyen Siparişler:</span> <strong>${totalPendingMoney.toLocaleString('tr-TR')} ₺</strong></div>
+        <div style="margin-bottom: 5px;"><span style="color:green;">Teslim Edilenler:</span> <strong>${totalDeliveredMoney.toLocaleString('tr-TR')} ₺</strong></div>
+        <div style="margin-bottom: 5px;"><span style="color:red;">İptal Edilenler:</span> <strong>${totalCanceledMoney.toLocaleString('tr-TR')} ₺</strong></div>
+        <hr style="border-top:1px dashed #ccc; margin: 10px 0;">
+        <div style="font-size: 16px;">GENEL TOPLAM CİRO (İptaller Hariç): <strong style="color:blue;">${overallMoney.toLocaleString('tr-TR')} ₺</strong></div>
+    `;
 
     const element = document.getElementById('pdfPrintArea');
     const opt = {

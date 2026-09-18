@@ -87,7 +87,8 @@
                         </div>
                         <div class="col-4">
                             <label>Miktar</label>
-                            <input type="number" id="o_amount" class="form-control" step="0.1" min="0.1" value="1" required>
+                            <!-- step="1" ile ondalık kapatıldı, sadece tam sayı -->
+                            <input type="number" id="o_amount" class="form-control" step="1" min="1" value="1" required>
                         </div>
                         <div class="col-4">
                             <label>Fiyat (₺)</label>
@@ -135,10 +136,10 @@
                 </div>
             </div>
 
-            <!-- TÜR BAZLI DETAYLI ÖZET KARTLARI (KG & ADET AYRIMLI) -->
+            <!-- TÜR BAZLI BÜYÜTÜLMÜŞ DETAYLI ÖZET KARTLARI -->
             <div class="card p-2 mb-3 shadow-sm border-0">
-                <h6 class="text-center text-muted m-2"><i class="bi bi-bar-chart-fill"></i> Filtreye Göre Tür Dağılımı</h6>
-                <div id="listSummaryContainer" class="d-flex flex-wrap justify-content-center gap-2 pb-2 mt-2"></div>
+                <h5 class="text-center text-primary m-2 fw-bold"><i class="bi bi-bar-chart-fill"></i> Türlere Göre Dağılım</h5>
+                <div id="listSummaryContainer" class="d-flex flex-wrap justify-content-center gap-3 pb-2 mt-2"></div>
             </div>
 
             <h5 class="mb-3">Sipariş Listesi</h5>
@@ -210,7 +211,8 @@
                             </div>
                             <div class="col-4">
                                 <label>Miktar</label>
-                                <input type="number" id="e_amount" class="form-control" step="0.1" min="0.1" required>
+                                <!-- step="1" tam sayı girişi için -->
+                                <input type="number" id="e_amount" class="form-control" step="1" min="1" required>
                             </div>
                             <div class="col-4">
                                 <label>Fiyat (₺)</label>
@@ -246,6 +248,8 @@
                 </thead>
                 <tbody id="pdfTableBody"></tbody>
             </table>
+            <!-- PDF Altında Görünecek Özet -->
+            <div id="pdfSummaryArea" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; font-size: 13px; text-align: right;"></div>
         </div>
     </div>
 
